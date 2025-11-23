@@ -1,11 +1,9 @@
 # lambda-bahaimedia-distribute-s3
 Distribute files to regional s3 buckets after getting an upload in any one bucket
 
-This function copies files uploaded in one s3 region to all other s3 regions. It captures and replicates the 'upload' action. 
-In the case of a 'move' action files will not automatically be replicated and a cron job is triggered server-side that watches
-for file moves and initiates a sync action with the US bucket. Less frequently, the US bucket will sync with all overseas buckets
-so eventually this file that was moved will be everywhere. We don't need it to be everywhere immediately because of 
-lambda-edge-file-redirect.
+This function copies files uploaded in one s3 region to all other s3 regions. It captures "All object create events" in a target 
+s3 bucket. When the files are duplicated metadata like "x-amz-meta-is_replicated true" will be set, and we look for that to determine
+if further replication should proceed. 
 
 Note that each region where an origin bucket exists will also have a local copy of this lambda function and lambda-bahaimedia-delete-s3.
 
@@ -16,9 +14,8 @@ s3 buckets have event notifications tied to Amazon SNS which goes like this:
 Eg, on the US server in an SNS subscription for the distribute function, the endpoints are:
   1. Region 1 distribute lambda
   2. Region 2 distribute lambda
-  3. Region 3 distribute lambda  
-  
-We avoid an infinite loop of files being copied because this function is triggered only on 'upload' and not on 'copy' actions, the original
-bucket sees an upload action but all other buckets when receiving the file see it as a copy/receipt action and the function is not 
-triggered in a loop. This also creates the need to especially watch for and somewhat manually replicate files that are moved by
-mediawiki since that replicates the copy action and those files would not be distributed by this function. See also lambda-edge-file-redirect.
+  3. Region 3 distribute lambda
+
+Note: If you ever want to run a sync command between buckets where most items do NOT have x-amz-meta-is_replicated true already set, it will be 
+expensive as the files will be needlessly duplicated while that metadata is set everywhere. If you need to run that command in each bucket under
+"Event notifications" find "copyReplication" and change it from "All object create events" to "Put" temporarily.
