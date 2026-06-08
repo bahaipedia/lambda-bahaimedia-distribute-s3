@@ -1,4 +1,4 @@
-import urllib
+import urllib.parse
 import boto3
 import ast
 import json
@@ -23,7 +23,10 @@ def lambda_handler(event, context):
             is_synced = True
             
         if is_synced:
-            replicated_key = metadata.get('replicated_key') or metadata.get('x-amz-meta-replicated_key')
+            raw_rep_key = metadata.get('replicated_key') or metadata.get('x-amz-meta-replicated_key')
+            
+            # Decode the key (handles None safely)
+            replicated_key = urllib.parse.unquote_plus(raw_rep_key) if raw_rep_key else None
             
             # If the replicated_key exactly matches the current path, it's a cross-bucket sync. Skip.
             if replicated_key == key:
@@ -40,16 +43,18 @@ def lambda_handler(event, context):
     # 2. PERFORM COPY WITH CONTENT-TYPE & NEW METADATA
     copy_source = {'Bucket': source_bucket, 'Key': key}
     
+    # Preserve existing metadata, just update our specific sync flags
+    new_metadata = metadata.copy()
+    new_metadata['is_replicated'] = 'true'
+    new_metadata['replicated_key'] = urllib.parse.quote_plus(key) # <--- Safe for non-ASCII characters
+    
     print(f"Copying {key} from bucket {source_bucket} to bucket {target_bucket}...")
     try:
         s3.copy_object(
             Bucket=target_bucket, 
             Key=key, 
             CopySource=copy_source,
-            Metadata={
-                'is_replicated': 'true',
-                'replicated_key': key  # <--- Store the exact path we are replicating to
-            },
+            Metadata=new_metadata,
             MetadataDirective='REPLACE',
             ContentType=source_content_type
         )
