@@ -23,22 +23,15 @@ def lambda_handler(event, context):
             is_synced = True
             
         if is_synced:
-            # Extract the path this file was originally replicated to
             replicated_key = metadata.get('replicated_key') or metadata.get('x-amz-meta-replicated_key')
             
-            # If the key doesn't match, MediaWiki moved/archived it. We MUST replicate it.
-            if replicated_key and replicated_key != key:
-                print(f"File moved from {replicated_key} to {key}. Proceeding with replication.")
-                is_synced = False
-            
-            # LEGACY CHECK: If there is no replicated_key, but it's an archive file, MediaWiki moved an old file.
-            elif not replicated_key and '/archive/' in key:
-                print(f"Legacy file archived to {key}. Proceeding with replication.")
-                is_synced = False
-                
-            else:
+            # If the replicated_key exactly matches the current path, it's a cross-bucket sync. Skip.
+            if replicated_key == key:
                 print(f"Skipping {key}: detected replication flag and paths match.")
                 return
+            
+            # If they don't match, OR if replicated_key is missing entirely, it's a local move/rename. Replicate.
+            print(f"Path mismatch or legacy file detected for {key}. Proceeding with replication.")
 
     except Exception as e:
         print(f"Error checking metadata for {key}: {e}")
