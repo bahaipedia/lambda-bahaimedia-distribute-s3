@@ -1,18 +1,20 @@
 import urllib.parse
 import boto3
-import ast
 import json
 
 print('Loading function')
 
 def lambda_handler(event, context):
     s3 = boto3.client('s3')
-    sns_message = ast.literal_eval(event['Records'][0]['Sns']['Message'])
+    
+    # 1. FIX: Use json.loads instead of ast.literal_eval to prevent crashes on 'null' or booleans in the AWS event
+    sns_message = json.loads(event['Records'][0]['Sns']['Message'])
+    
     target_bucket = context.function_name
     source_bucket = str(sns_message['Records'][0]['s3']['bucket']['name'])
     key = str(urllib.parse.unquote_plus(sns_message['Records'][0]['s3']['object']['key']))
     
-    # 1. LOOP PREVENTION & METADATA RETRIEVAL
+    # 2. LOOP PREVENTION & METADATA RETRIEVAL
     try:
         head = s3.head_object(Bucket=source_bucket, Key=key)
         metadata = head.get('Metadata', {})
@@ -40,13 +42,13 @@ def lambda_handler(event, context):
         print(f"Error checking metadata for {key}: {e}")
         return
 
-    # 2. PERFORM COPY WITH CONTENT-TYPE & NEW METADATA
+    # 3. PERFORM COPY WITH CONTENT-TYPE & NEW METADATA
     copy_source = {'Bucket': source_bucket, 'Key': key}
     
     # Preserve existing metadata, just update our specific sync flags
     new_metadata = metadata.copy()
     new_metadata['is_replicated'] = 'true'
-    new_metadata['replicated_key'] = urllib.parse.quote_plus(key) # <--- Safe for non-ASCII characters
+    new_metadata['replicated_key'] = urllib.parse.quote_plus(key)
     
     print(f"Copying {key} from bucket {source_bucket} to bucket {target_bucket}...")
     try:
