@@ -7,7 +7,7 @@ print('Loading function')
 def lambda_handler(event, context):
     s3 = boto3.client('s3')
     
-    # 1. FIX: Use json.loads instead of ast.literal_eval to prevent crashes on 'null' or booleans in the AWS event
+    # 1. Use json.loads instead of ast.literal_eval to prevent crashes on 'null' or booleans in the AWS event
     sns_message = json.loads(event['Records'][0]['Sns']['Message'])
     
     target_bucket = context.function_name
